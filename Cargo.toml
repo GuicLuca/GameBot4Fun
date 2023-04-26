@@ -1,5 +1,5 @@
 [package]
-name = "GameBot4Fun"
+name = "game_bot4_fun"
 version = "0.0.1"
 authors = ["Lucas Guichard<lucasguichard@konekan.fr>"]
 edition = "2021"
@@ -10,9 +10,11 @@ debug = 1
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = {version ="1.25.0", features = ["full"]}
+tokio = {version ="1.25.0", features = ["full"]} # async
+log = "0.4.17" # loger lib fro macros
+dotenv = "0.15.0" # used to generate env variables from the .env file
 
-[dependencies.serenity]
+[dependencies.serenity] # discord framwork
 default-features = false
 features = ["client", "gateway", "model", "rustls_backend"]
 version = "0.11.5"
