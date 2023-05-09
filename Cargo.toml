@@ -13,7 +13,8 @@ debug = 1
 tokio = {version ="1.25.0", features = ["full"]} # async
 log = "0.4.17" # loger lib fro macros
 dotenv = "0.15.0" # used to generate env variables from the .env file
-sqlx = { version="0.6.3", features = ["runtime-tokio-rustls", "sqlite", "offline"] } # database
+rusqlite = "0.29.0" # database
+tokio-rusqlite = "0.4.0" # database async
 
 [dependencies.serenity] # discord framwork
 default-features = false

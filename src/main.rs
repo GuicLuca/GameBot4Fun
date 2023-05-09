@@ -1,20 +1,31 @@
+extern crate core;
+
 mod logger;
+mod commands;
+mod database;
 
 use std::fmt::Write as _;
 use std::env;
+use std::sync::{Arc};
 use dotenv::dotenv;
-use log::{error};
+use log::{error, info, warn};
 use serenity::{async_trait, Client};
 use serenity::client::{Context, EventHandler};
+use serenity::model::application::command::Command;
+use serenity::model::application::interaction::{Interaction, InteractionResponseType};
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
+use serenity::model::id::GuildId;
 use serenity::prelude::GatewayIntents;
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::{migrate, SqlitePool};
+use tokio::sync::Mutex;
+use tokio_rusqlite::Connection;
+use crate::database::{run_migrations, SharedConnection};
 use crate::logger::init;
 
+
+
 struct Bot{
-    database: SqlitePool
+    database: SharedConnection
 }
 
 
@@ -31,7 +42,7 @@ impl EventHandler for Bot{
         //
         // This command add a new tips category to the list and then, display
         // every category known.
-        if let Some(cmd_content) = msg.content.strip_prefix("!tips_category add") {
+        /*if let Some(cmd_content) = msg.content.strip_prefix("!tips_category add") {
             let category_name = cmd_content.trim();
 
             // 1 - insert the new type
@@ -221,6 +232,31 @@ impl EventHandler for Bot{
                     error!("Failed to send a message on the chanel id {}. Message:\n{}\n\nError:\n{}", msg.channel_id, response, err);
                 }
             };
+        }*/
+    }
+
+    // The interaction handler will handle every /commands
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        if let Interaction::ApplicationCommand(command) = interaction {
+            info!("Received command interaction: {:#?}", command);
+
+            let content = match command.data.name.as_str() {
+                "tips_list" => {
+                    commands::tips::list::run(&command.data.options, self.database.clone()).await
+                },
+                _ => "Not implemented :(".to_string(),
+            };
+
+            if let Err(why) = command
+                .create_interaction_response(&ctx.http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|message| message.content(content))
+                })
+                .await
+            {
+                warn!("Cannot respond to slash command: {}", why);
+            }
         }
     }
 
@@ -229,33 +265,45 @@ impl EventHandler for Bot{
     // contains data like the current user's guild Ids, current user data, private channels, and more.
     //
     // In this case, just print what the current user's username is.
-    async fn ready(&self, _: Context, data: Ready) {
+    async fn ready(&self, ctx: Context, data: Ready) {
         println!("{} is connected and ready to use !", data.user.name);
+
+        let guild_id = data.guilds.first().unwrap().id;
+
+            /*GuildId(
+            env::var("GUILD_ID")
+                .expect("Expected GUILD_ID in environment")
+                .parse()
+                .expect("GUILD_ID must be an integer"),
+        );*/
+
+        let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
+            commands
+                .create_application_command(|command| commands::tips::list::register(command))
+        })
+            .await;
+
+        println!("I now have the following guild slash commands: {:#?}", commands);
     }
 }
 
 
 #[tokio::main]
 async fn main() {
+    dotenv().expect("Failed to load .env variables into system env");
     // init the logger : see logger.rs
     init().expect("Failed to init the logger.");
-    dotenv().expect("Failed to load .env variables into system env");
     // Configure the client with the discord bot token in the environment token
-    let token = env::var("DISCORD_TOKEN").expect("Expected an env file with the DISCORD_TOKEN entry set. {}");
+    let token = env::var("DISCORD_TOKEN").expect("Expected an env file with the DISCORD_TOKEN entry set.");
 
     // Initiate a connection to the database file, creating the file if required.
-    let database = SqlitePoolOptions::new()
-        .max_connections(5)
-        .connect_with(
-            SqliteConnectOptions::new()
-                .filename("database.sqlite")
-                .create_if_missing(true),
-        )
-        .await
-        .expect("Couldn't connect to database");
+    let database: SharedConnection = Arc::from(Mutex::from(Connection::open("database.sqlite").await
+        .expect("Couldn't connect to database")));
 
     // Run migrations, which updates the database's schema to the latest version.
-    migrate!("./migrations").run(&database).await.expect("Couldn't run database migrations");
+    {
+        run_migrations(database.clone()).await.expect("Failed to run migrations. Error");
+    }
 
     let bot = Bot{
         database

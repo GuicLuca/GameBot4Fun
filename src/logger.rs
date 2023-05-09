@@ -1,4 +1,5 @@
-use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
+use std::env;
+use log::{info, Level, LevelFilter, Metadata, Record, SetLoggerError};
 
 struct SimpleLogger;
 
@@ -18,7 +19,18 @@ impl log::Log for SimpleLogger {
 
 pub fn init() -> Result<(), SetLoggerError> {
     log::set_logger(&LOGGER)
-        .map(|()| log::set_max_level(LevelFilter::Warn))
+        .map(|()|{
+            let level_filter: LevelFilter = match env::var("LOG_LEVEL").expect("Expected an env file with the LOG_LEVEL entry set. {}").as_str() {
+                "Off" => LevelFilter::Off,
+                "Trace" => LevelFilter::Trace,
+                "Debug" => LevelFilter::Debug,
+                "Info" => LevelFilter::Info,
+                "Warn" => LevelFilter::Warn,
+                "Error" => LevelFilter::Error,
+                _ => LevelFilter::Info,
+            };
+            log::set_max_level(level_filter)
+        })
 }
 
 static LOGGER: SimpleLogger = SimpleLogger;
