@@ -1,5 +1,5 @@
 use std::env;
-use log::{info, Level, LevelFilter, Metadata, Record, SetLoggerError};
+use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 
 struct SimpleLogger;
 

@@ -3,20 +3,21 @@ extern crate core;
 mod logger;
 mod commands;
 mod database;
+mod utils;
 
-use std::fmt::Write as _;
 use std::env;
 use std::sync::{Arc};
 use dotenv::dotenv;
 use log::{error, info, warn};
 use serenity::{async_trait, Client};
+use serenity::builder::CreateEmbed;
 use serenity::client::{Context, EventHandler};
-use serenity::model::application::command::Command;
 use serenity::model::application::interaction::{Interaction, InteractionResponseType};
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::model::id::GuildId;
 use serenity::prelude::GatewayIntents;
+use serenity::utils::Color;
 use tokio::sync::Mutex;
 use tokio_rusqlite::Connection;
 use crate::database::{run_migrations, SharedConnection};
@@ -35,6 +36,27 @@ impl EventHandler for Bot{
     // to execute corresponding commands.
     async fn message(&self, ctx: Context, msg: Message) {
         let _user_id = msg.author.id.0 as i64;
+        if msg.content == "embed"{
+            let embed = CreateEmbed::default()
+                .title("Embed Title")
+                .description("This is the embed description.")
+                .color(Color::from_rgb(25, 78, 13))
+                .author(|a| a.name("Author Name"))
+                .thumbnail("https://i.imgur.com/qOYH7Mz.png")
+                .image("https://i.imgur.com/vXI8C2o.png")
+                .footer(|f| f.text("Footer Text")).clone();
+
+            let msg = msg.channel_id.send_message(&ctx.http, |m| {
+                m.set_embed(embed)
+                    .add_file("./documentation/tips_list_example.png")
+            }).await;
+
+
+            if let Err(why) = msg {
+                error!("Failed to send embed message. Error:\n{}", why);
+            }
+        }
+
 
 
         // !tips_category add :
@@ -244,6 +266,9 @@ impl EventHandler for Bot{
                 "tips_list" => {
                     commands::tips::list::run(&command.data.options, self.database.clone()).await
                 },
+                "tips_create" => {
+                    commands::tips::create::run(&command.data.options, self.database.clone()).await
+                },
                 _ => "Not implemented :(".to_string(),
             };
 
@@ -270,16 +295,10 @@ impl EventHandler for Bot{
 
         let guild_id = data.guilds.first().unwrap().id;
 
-            /*GuildId(
-            env::var("GUILD_ID")
-                .expect("Expected GUILD_ID in environment")
-                .parse()
-                .expect("GUILD_ID must be an integer"),
-        );*/
-
         let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
             commands
                 .create_application_command(|command| commands::tips::list::register(command))
+                .create_application_command(|command| commands::tips::create::register(command))
         })
             .await;
 
