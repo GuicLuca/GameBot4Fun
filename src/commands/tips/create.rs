@@ -1,11 +1,11 @@
 use rusqlite::params;
-use serenity::builder::CreateApplicationCommand;
+use serenity::builder::{CreateApplicationCommand, CreateEmbed};
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::model::prelude::interaction::application_command::{
     CommandDataOption,
 };
 use crate::database::SharedConnection;
-use crate::utils::{display_full_tip, get_optional_param_from_options, get_required_param_from_options};
+use crate::utils::{display_full_tip_in_embed, get_optional_string_param_from_options, get_required_string_param_from_options, make_error_embed};
 
 
 /**
@@ -15,23 +15,23 @@ use crate::utils::{display_full_tip, get_optional_param_from_options, get_requir
  * @param options: &[CommandDataOption], A slice of command option found in the interaction
  * @param conn: SharedConnection, the database access to run queries on the sqlite database.
  *
- * @return string, the response message
+ * @return CreateEmbed, the embed message to say in response
  */
-pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> String {
+pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> CreateEmbed {
     // 1 - check if optional values are present
-    let tags: String = get_optional_param_from_options(options, 2);
+    let tags: String = get_optional_string_param_from_options(options, 2);
     let tags_clone = tags.clone();
 
     // 2 - Get required param (title and content)
-    let title = match get_required_param_from_options(options, 0, "title"){
+    let title = match get_required_string_param_from_options(options, 0, "title"){
         Ok(title) => title,
-        Err(err) => return err,
+        Err(err) => return make_error_embed("tips_create::run", err),
     };
     let title_clone = title.clone();
 
-    let content = match get_required_param_from_options(options, 1, "content"){
+    let content = match get_required_string_param_from_options(options, 1, "content"){
         Ok(content) => content,
-        Err(err) => return err,
+        Err(err) => return make_error_embed("tips_create::run", err),
     };
     let content_clone = content.clone();
 
@@ -42,17 +42,17 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Strin
         Ok(())
     }).await {
         Ok(_) => {
-            display_full_tip(title, content, Some(tags))
+            display_full_tip_in_embed(title, content, Some(tags))
         }
         Err(err) => {
-            format!("Failed to create the new tip. Error:\n{}", err)
+            make_error_embed("tips_create::run", err.to_string())
         }
     };
 }
 
 /**
  * This method is the signature of the command /tips_create.
- * THis is here that we describe the name, the options, all
+ * This is here that we describe the name, the options, all
  * descriptions and hints of the method.
  *
  * @param command: &mut CreateApplicationCommand, The command object that handle the creation of new application commands.
