@@ -6,7 +6,7 @@ use serenity::model::prelude::interaction::application_command::{
     CommandDataOption,
 };
 use crate::database::SharedConnection;
-use crate::utils::{display_full_tip_in_embed, get_optional_string_param_from_options, get_required_number_param_from_options, make_error_embed};
+use crate::utils::{display_full_tip_in_embed, get_required_number_param_from_options, make_error_embed};
 
 
 /**
@@ -24,9 +24,9 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
 
 
     // 1 - check if optional values are present
-    let title: String = String::from("");
-    let content: String = String::from("");
-    let tags: String = String::from("");
+    let mut title: String = String::from("");
+    let mut content: String = String::from("");
+    let mut tags: String = String::from("");
 
 
     for option in options {
@@ -34,55 +34,62 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
             "tags" => {
                 if let Some(value) = &option.resolved {
                     match value {
-                        CommandDataOptionValue::String(tags) => {
-                            println!("Tags option value: {}", tags);
-                            // Handle the tags value
+                        CommandDataOptionValue::String(param) => {
+                            tags = param.to_owned();
                         }
                         _ => {
-                            println!("Unsupported option value type for tags");
-                            // Handle unsupported option value types for tags
+                            return make_error_embed("tips_update::run", format!("The parameter tags given has a bad format.\nExpected lowercase csv with no spaces around coma. like this : tag,tag2,tag3,..."));
                         }
                     }
                 } else {
-                    println!("Missing tags option value");
-                    // Handle missing tags option value
+                    return make_error_embed("tips_update::run", format!("The parameter tags is empty.\nExpected lowercase csv with no spaces around coma. like this : tag,tag2,tag3,..."));
                 }
             }
             "content" => {
                 if let Some(value) = &option.resolved {
                     match value {
-                        CommandDataOptionValue::String(content) => {
-                            println!("Content option value: {}", content);
-                            // Handle the content value
+                        CommandDataOptionValue::String(param) => {
+                            content = param.to_owned();
                         }
                         _ => {
-                            println!("Unsupported option value type for content");
-                            // Handle unsupported option value types for content
+                            return make_error_embed("tips_update::run", format!("The parameter content given has a bad format.\nExpected a string."));
                         }
                     }
                 } else {
-                    println!("Missing content option value");
-                    // Handle missing content option value
+                    return make_error_embed("tips_update::run", format!("The parameter content is empty."));
+                }
+            }
+            "title" => {
+                if let Some(value) = &option.resolved {
+                    match value {
+                        CommandDataOptionValue::String(param) => {
+                            title = param.to_owned();
+                        }
+                        _ => {
+                            return make_error_embed("tips_update::run", format!("The parameter title given has a bad format.\nExpected a string."));
+                        }
+                    }
+                } else {
+                    return make_error_embed("tips_update::run", format!("The parameter title is empty."));
                 }
             }
             _ => {
-                println!("Unknown option name");
+                println!("Unknown option name.\n{:?}", option);
                 // Handle unknown option names
             }
         }
     }
 
-    let title: String = get_optional_string_param_from_options(options, 1);
     if title != "" {
         updated_columns.push("title");
         updated_values.push(title);
     }
-    let content: String = get_optional_string_param_from_options(options, 2);
+
     if content != "" {
         updated_columns.push("content");
         updated_values.push(content);
     }
-    let tags: String = get_optional_string_param_from_options(options, 3);
+
     if tags != "" {
         updated_columns.push("tags");
         updated_values.push(tags);
@@ -95,8 +102,8 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
     let tip_id_clone = tip_id.clone();
 
     let mut set_clause_tmp: Vec<String> = Vec::with_capacity(3);
-    for id in 0..updated_columns.len()-1 {
-        set_clause_tmp.push(format!("{}='{}'",updated_columns.get(id).unwrap(), updated_values.get(id).unwrap()))
+    for id in 0..updated_columns.len() {
+        set_clause_tmp.push(format!("{}='{}'",updated_columns.get(id).unwrap(), updated_values.get(id).unwrap()));
     }
     let set_clause = set_clause_tmp.join(", ");
 
