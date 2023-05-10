@@ -66,6 +66,9 @@ impl EventHandler for Bot{
                 "tips_read" => {
                     commands::tips::read::run(&command.data.options, self.database.clone()).await
                 },
+                "tips_update" => {
+                    commands::tips::update::run(&command.data.options, self.database.clone()).await
+                },
                 _ => {
                     CreateEmbed::default()
                         .title("Not implemented :(")
@@ -106,6 +109,7 @@ impl EventHandler for Bot{
                 .create_application_command(|command| commands::tips::list::register(command))
                 .create_application_command(|command| commands::tips::create::register(command))
                 .create_application_command(|command| commands::tips::read::register(command))
+                .create_application_command(|command| commands::tips::update::register(command))
         })
             .await;
 
