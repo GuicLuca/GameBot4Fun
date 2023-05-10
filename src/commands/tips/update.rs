@@ -72,7 +72,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
         }
     }
 
-    let title: String = get_optional_string_param_from_options(options, 1);
+    /*let title: String = get_optional_string_param_from_options(options, 1);
     if title != "" {
         updated_columns.push("title");
         updated_values.push(title);
@@ -93,6 +93,8 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
         Err(err) => return make_error_embed("tips_create::run", err),
     };
     let tip_id_clone = tip_id.clone();
+
+     */
 
     let mut set_clause_tmp: Vec<String> = Vec::with_capacity(3);
     for id in 0..updated_columns.len()-1 {
