@@ -1,3 +1,4 @@
+use log::debug;
 use rusqlite::params;
 use serenity::builder::{CreateApplicationCommand, CreateEmbed};
 use serenity::model::application::interaction::application_command::CommandDataOptionValue;
@@ -5,6 +6,9 @@ use serenity::model::prelude::command::CommandOptionType;
 use serenity::model::prelude::interaction::application_command::{
     CommandDataOption,
 };
+use serenity::model::Timestamp;
+use serenity::utils::Color;
+use crate::commands::tips::read::ReadTip;
 use crate::database::SharedConnection;
 use crate::utils::{display_full_tip_in_embed, get_required_number_param_from_options, make_error_embed};
 
@@ -27,7 +31,6 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
     let mut title: String = String::from("");
     let mut content: String = String::from("");
     let mut tags: String = String::from("");
-
 
     for option in options {
         match option.name.as_str() {
@@ -95,12 +98,14 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
         updated_values.push(tags);
     }
 
+    // 2 - Get the id of the tip to update
     let tip_id = match get_required_number_param_from_options(options, 0, "id"){
         Ok(title) => title,
         Err(err) => return make_error_embed("tips_create::run", err),
     };
     let tip_id_clone = tip_id.clone();
 
+    // 3 - Prepare the sql query
     let mut set_clause_tmp: Vec<String> = Vec::with_capacity(3);
     for id in 0..updated_columns.len() {
         set_clause_tmp.push(format!("{}='{}'",updated_columns.get(id).unwrap(), updated_values.get(id).unwrap()));
@@ -108,22 +113,42 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
     let set_clause = set_clause_tmp.join(", ");
 
 
-    // 3 - Insert the new tip in the database and return a response message
+    // 4 - Insert the new tip in the database and return a response message
     return match conn.lock().await.call(move |conn| {
-        let query = &*format!("UPDATE tips SET {} WHERE id = {}", set_clause, tip_id_clone);
-        println!("{}", query);
-        conn.execute(query, params![])?;
-        Ok(())
-    }).await {
-        Ok(_) => {
-            display_full_tip_in_embed(
-                format!("Tip n°{} successfully updated", tip_id),
-                format!("Enter `/tips_read {}` to see the new version of the tip", tip_id),
-                None
+        if set_clause != ""{
+            let query = &*format!("UPDATE tips SET {} WHERE id = {}", set_clause, tip_id_clone);
+            debug!("Update query run : {}", query);
+            conn.execute(query, params![])?;
+        }
+
+        let mut stmt = conn.prepare("SELECT title, content, tags FROM tips WHERE id = ?1")?;
+        let row_data = stmt.query_row([tip_id], |row|
+            Ok(
+                ReadTip{
+                    title: row.get(0)?,
+                    content: row.get(1)?,
+                    tags: row.get(2)?,
+                }
             )
+        )?;
+
+        // 3 - return avery row found in a Vec<String>
+        Ok::<_, rusqlite::Error>(row_data)
+    }).await {
+        Ok(tip) => {
+            display_full_tip_in_embed(tip.title, tip.content, Some(tip.tags))
         }
         Err(err) => {
-            make_error_embed("tips_create::run", err.to_string())
+            if let tokio_rusqlite::Error::Rusqlite(rusqlite_err) = &err {
+                if let rusqlite::Error::QueryReturnedNoRows = rusqlite_err {
+                    return CreateEmbed::default()
+                        .title("Tip id unknown")
+                        .description("The id requested is not valid. If you think this is an error, please contact server administrator")
+                        .timestamp(Timestamp::now())
+                        .color(Color::from_rgb(255, 0, 0)).to_owned();
+                }
+            }
+            make_error_embed("tips_update::run", err.to_string())
         }
     };
 }

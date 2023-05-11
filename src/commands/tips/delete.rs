@@ -1,3 +1,4 @@
+use rusqlite::params;
 use serenity::builder::{CreateApplicationCommand, CreateEmbed};
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::model::prelude::interaction::application_command::{
@@ -6,21 +7,10 @@ use serenity::model::prelude::interaction::application_command::{
 use serenity::model::Timestamp;
 use serenity::utils::Color;
 use crate::database::SharedConnection;
-use crate::utils::{display_full_tip_in_embed, get_required_number_param_from_options, make_error_embed};
-
-
-/*
-This structure is used to group fetched data
-from the database and then compute it
- */
-pub struct ReadTip {
-    pub title: String,
-    pub content: String,
-    pub tags: String
-}
+use crate::utils::{get_required_number_param_from_options, make_error_embed};
 
 /**
- * This method is the execution of the command /tips_read.
+ * This method is the execution of the command /tips_delete.
  * This is here that all the workflow occur.
  *
  * @param options: &[CommandDataOption], A slice of command option found in the interaction
@@ -29,32 +19,44 @@ pub struct ReadTip {
  * @return CreateEmbed, the embed message to say in response
  */
 pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> CreateEmbed {
-    // 1 - check if optional values are present
+    // 1 - get parm values
     let tip_id: u64 = match get_required_number_param_from_options(options, 0, "Id"){
         Ok(val) => val,
         Err(err) => {
-            return make_error_embed("tips_read::run", err.to_string())
+            return make_error_embed("tips_delete::run", err.to_string())
+        }
+    };
+    let conf_tip_id: u64 = match get_required_number_param_from_options(options, 1, "confirm_id"){
+        Ok(val) => val,
+        Err(err) => {
+            return make_error_embed("tips_delete::run", err.to_string())
         }
     };
 
-    // 3 - Insert the new tip in the database and return a response message
+    // 2 - Ensure val and confirmation are equal
+    if tip_id != conf_tip_id {
+        return CreateEmbed::default()
+            .title("Tip id and confirmation are different !")
+            .colour(Color::from_rgb(255, 204, 0))
+            .description("Please confirm the id of the tip you want to delete.\nIf you think it's an error contact the administrator of the server.")
+            .timestamp(Timestamp::now())
+            .to_owned();
+    }
+
+    // 3 - Delete the tip from the database and return a response message
     return match conn.lock().await.call(move |conn| {
-        let mut stmt = conn.prepare("SELECT title, content, tags FROM tips WHERE id = ?1")?;
-        let row_data = stmt.query_row([tip_id], |row|
-            Ok(
-                ReadTip{
-                    title: row.get(0)?,
-                    content: row.get(1)?,
-                    tags: row.get(2)?,
-                }
-            )
-        )?;
+        conn.execute("DELETE FROM tips WHERE id = ?1", params![tip_id])?;
 
         // 3 - return avery row found in a Vec<String>
-        Ok::<_, rusqlite::Error>(row_data)
+        Ok(())
     }).await {
-        Ok(val) => {
-            display_full_tip_in_embed(val.title, val.content, Some(val.tags))
+        Ok(_) => {
+            CreateEmbed::default()
+                .title("Tip deleted successfully :)")
+                .colour(Color::from_rgb(102, 255, 51))
+                .description("Nothing to say so here is a smiley `◖ᵔᴥᵔ◗ ♪ ♫`")
+                .timestamp(Timestamp::now())
+                .to_owned()
         }
         Err(err) => {
             if let tokio_rusqlite::Error::Rusqlite(rusqlite_err) = &err {
@@ -72,7 +74,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
 }
 
 /**
- * This method is the signature of the command /tips_read.
+ * This method is the signature of the command /tips_delete.
  * This is here that we describe the name, the options, all
  * descriptions and hints of the method.
  *
@@ -81,12 +83,20 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
  * @return &mut CreateApplicationCommand, used to chain operations
  */
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
-    command.name("tips_read").description("Display a tip.")
+    command.name("tips_delete").description("Delete.")
         .create_option(|option| {
             option
                 .name("id")
-                .description("The tip id you want to see.")
+                .description("The tip id you want to delete.")
                 .kind(CommandOptionType::Number)
                 .required(true)
         })
+        .create_option(|option| {
+            option
+                .name("confirm_id")
+                .description("The confirmationn of tip id you want to delete.")
+                .kind(CommandOptionType::Number)
+                .required(true)
+        })
+
 }
