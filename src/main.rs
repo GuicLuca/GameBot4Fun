@@ -20,6 +20,7 @@ use serenity::model::Timestamp;
 use serenity::prelude::GatewayIntents;
 use serenity::utils::Color;
 use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 use tokio_rusqlite::Connection;
 use crate::database::{run_migrations, SharedConnection};
 use crate::logger::init;
@@ -27,7 +28,8 @@ use crate::logger::init;
 
 
 struct Bot{
-    database: SharedConnection
+    database: SharedConnection, // Shared connection to the database to run sql request from everywhere
+    tips_scheduler: Option<JoinHandle<()>> // Handler of the scheduler to stop it
 }
 
 
@@ -72,6 +74,9 @@ impl EventHandler for Bot{
                 "tips_delete" => {
                     commands::tips::delete::run(&command.data.options, self.database.clone()).await
                 },
+                "scheduler_config" => {
+                    commands::tips_scheduler::config::run(&command.data.options, self.database.clone()).await
+                },
                 _ => {
                     CreateEmbed::default()
                         .title("Not implemented :(")
@@ -109,11 +114,14 @@ impl EventHandler for Bot{
 
         let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
             commands
+                // tips
                 .create_application_command(|command| commands::tips::list::register(command))
                 .create_application_command(|command| commands::tips::create::register(command))
                 .create_application_command(|command| commands::tips::read::register(command))
                 .create_application_command(|command| commands::tips::update::register(command))
                 .create_application_command(|command| commands::tips::delete::register(command))
+                // scheduler
+                .create_application_command(|command| commands::tips_scheduler::config::register(command))
         })
             .await;
 
@@ -140,7 +148,8 @@ async fn main() {
     }
 
     let bot = Bot{
-        database
+        database,
+        tips_scheduler: None // there is now scheduler running
     };
 
 

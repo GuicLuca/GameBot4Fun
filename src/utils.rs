@@ -44,15 +44,12 @@ pub fn get_required_string_param_from_options(options: &[CommandDataOption], ind
  *
  * @return Result<u64, String>, the value of the parameter or the error message
  */
-pub fn get_required_number_param_from_options(options: &[CommandDataOption], index: usize, name: &str,) -> Result<u64, String>
+pub fn get_required_integer_param_from_options(options: &[CommandDataOption], index: usize, name: &str,) -> Result<u64, String>
 {
     match options.get(index) {
         Some(option) => match &option.resolved {
             Some(resolved) => match resolved {
-                CommandDataOptionValue::Number(content) => {
-                    if content.fract() != 0.0 {
-                        return Err(format!("Incorrect type for the parameter {}. It must be an integer >= 0", name));
-                    }
+                CommandDataOptionValue::Integer(content) => {
                     Ok(content.to_owned() as u64)
                 },
                 _ => {

@@ -6,7 +6,7 @@ use serenity::model::prelude::interaction::application_command::{
 use serenity::model::Timestamp;
 use serenity::utils::Color;
 use crate::database::SharedConnection;
-use crate::utils::{display_full_tip_in_embed, get_required_number_param_from_options, make_error_embed};
+use crate::utils::{display_full_tip_in_embed, get_required_integer_param_from_options, make_error_embed};
 
 
 /*
@@ -30,7 +30,7 @@ pub struct ReadTip {
  */
 pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> CreateEmbed {
     // 1 - check if optional values are present
-    let tip_id: u64 = match get_required_number_param_from_options(options, 0, "Id"){
+    let tip_id: u64 = match get_required_integer_param_from_options(options, 0, "Id"){
         Ok(val) => val,
         Err(err) => {
             return make_error_embed("tips_read::run", err.to_string())

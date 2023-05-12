@@ -10,7 +10,7 @@ use serenity::model::Timestamp;
 use serenity::utils::Color;
 use crate::commands::tips::read::ReadTip;
 use crate::database::SharedConnection;
-use crate::utils::{display_full_tip_in_embed, get_required_number_param_from_options, make_error_embed};
+use crate::utils::{display_full_tip_in_embed, get_required_integer_param_from_options, make_error_embed};
 
 
 /**
@@ -99,7 +99,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
     }
 
     // 2 - Get the id of the tip to update
-    let tip_id = match get_required_number_param_from_options(options, 0, "id"){
+    let tip_id = match get_required_integer_param_from_options(options, 0, "id"){
         Ok(title) => title,
         Err(err) => return make_error_embed("tips_create::run", err),
     };
@@ -168,7 +168,7 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
         option
             .name("id")
             .description("The id of the tip you want to update.")
-            .kind(CommandOptionType::Number)
+            .kind(CommandOptionType::Integer)
             .required(true)
         })
         .create_option(|option| {
