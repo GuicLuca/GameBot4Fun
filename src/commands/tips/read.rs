@@ -37,7 +37,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
         }
     };
 
-    // 3 - Insert the new tip in the database and return a response message
+    // 3 - Get the tip from the database and return a response message
     return match conn.lock().await.call(move |conn| {
         let mut stmt = conn.prepare("SELECT title, content, tags FROM tips WHERE id = ?1")?;
         let row_data = stmt.query_row([tip_id], |row|
@@ -86,7 +86,7 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
             option
                 .name("id")
                 .description("The tip id you want to see.")
-                .kind(CommandOptionType::Number)
+                .kind(CommandOptionType::Integer)
                 .required(true)
         })
 }

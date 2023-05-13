@@ -45,18 +45,27 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
 
     // 3 - Delete the tip from the database and return a response message
     return match conn.lock().await.call(move |conn| {
-        conn.execute("DELETE FROM tips WHERE id = ?1", params![tip_id])?;
+        let affected_row = conn.execute("DELETE FROM tips WHERE id = ?1", params![tip_id])?;
 
         // 3 - return avery row found in a Vec<String>
-        Ok(())
+        Ok(affected_row)
     }).await {
-        Ok(_) => {
-            CreateEmbed::default()
-                .title("Tip deleted successfully :)")
-                .colour(Color::from_rgb(102, 255, 51))
-                .description("Nothing to say so here is a smiley `◖ᵔᴥᵔ◗ ♪ ♫`")
-                .timestamp(Timestamp::now())
-                .to_owned()
+        Ok(row) => {
+            if row == 1 {
+                CreateEmbed::default()
+                    .title("Tip deleted successfully :)")
+                    .colour(Color::from_rgb(102, 255, 51))
+                    .description("Nothing to say so here is a smiley `◖ᵔᴥᵔ◗ ♪ ♫`")
+                    .timestamp(Timestamp::now())
+                    .to_owned()
+            }else{
+                CreateEmbed::default()
+                    .title("Tip id unknown")
+                    .colour(Color::from_rgb(255, 102, 51))
+                    .description("The id requested is not valid. If you think this is an error, please contact server administrator")
+                    .timestamp(Timestamp::now())
+                    .to_owned()
+            }
         }
         Err(err) => {
             if let tokio_rusqlite::Error::Rusqlite(rusqlite_err) = &err {
@@ -88,14 +97,14 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
             option
                 .name("id")
                 .description("The tip id you want to delete.")
-                .kind(CommandOptionType::Number)
+                .kind(CommandOptionType::Integer)
                 .required(true)
         })
         .create_option(|option| {
             option
                 .name("confirm_id")
                 .description("The confirmationn of tip id you want to delete.")
-                .kind(CommandOptionType::Number)
+                .kind(CommandOptionType::Integer)
                 .required(true)
         })
 

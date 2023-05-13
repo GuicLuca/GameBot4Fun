@@ -1,6 +1,8 @@
+use std::sync::Arc;
 use rusqlite::{Error, OptionalExtension, params};
 use rusqlite::Error::InvalidParameterCount;
 use serenity::builder::{CreateApplicationCommand, CreateEmbed};
+use serenity::http::Http;
 use serenity::model::application::interaction::application_command::CommandDataOptionValue;
 use serenity::model::channel::PartialChannel;
 use serenity::model::id::ChannelId;
@@ -12,16 +14,19 @@ use serenity::model::prelude::interaction::application_command::{
 };
 use serenity::model::Timestamp;
 use serenity::utils::Color;
+use crate::commands::tips_scheduler::scheduler::{start, stop};
 use crate::database::SharedConnection;
+use crate::SharedJoinHandle;
 use crate::utils::{display_full_tip_in_embed, make_error_embed};
 
 
-static CONFIG_ID: usize = 1;
+pub static CONFIG_ID: usize = 1;
 
-struct SchedulerConfig {
-    channel: u64,
-    hour: usize,
-    minute: usize,
+#[derive(Clone)]
+pub struct SchedulerConfig {
+    pub channel: u64,
+    pub hour: u32,
+    pub minute: u32,
 }
 
 /**
@@ -33,7 +38,7 @@ struct SchedulerConfig {
  *
  * @return CreateEmbed, the embed message to say in response
  */
-pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> CreateEmbed {
+pub async fn run(options: &[CommandDataOption], conn: SharedConnection, scheduler: SharedJoinHandle, http: &Arc<Http>) -> CreateEmbed {
     // 1 - get parms values :
     let mut updated_columns:Vec<&str> = Vec::with_capacity(3); // we will add column name updated for the query creation
     let mut updated_values:Vec<usize> = Vec::with_capacity(3); // we will add new values
@@ -122,7 +127,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
     let set_clause = set_clause_tmp.join(", ");
 
     // 3 - Insert the new tip in the database and return a response message
-    return match conn.lock().await.call(move |conn| {
+    let mut respons_embed = match conn.lock().await.call(move |conn| {
         // Check if the config object exist in db :
         let config_opt: Option<usize> = conn.query_row("SELECT id FROM scheduler_config WHERE id = ?1", params![CONFIG_ID], |row|{
             row.get(0)
@@ -185,6 +190,16 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
             make_error_embed("scheduler_config::run", err.to_string())
         }
     };
+
+    // 4 - restart scheduler
+    stop(conn.clone(), scheduler.clone()).await;
+    start(conn, scheduler, http.clone()).await;
+
+
+
+    respons_embed.author(|a|{
+        a.name("Scheduler has been restarted to sync with the new configuration")
+    }).to_owned()
 }
 
 /**

@@ -8,7 +8,7 @@ mod utils;
 use std::env;
 use std::sync::{Arc};
 use dotenv::dotenv;
-use log::{error, info, warn};
+use log::{error, warn};
 use serenity::{async_trait, Client};
 use serenity::builder::CreateEmbed;
 use serenity::client::{Context, EventHandler};
@@ -19,17 +19,17 @@ use serenity::model::id::GuildId;
 use serenity::model::Timestamp;
 use serenity::prelude::GatewayIntents;
 use serenity::utils::Color;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio_rusqlite::Connection;
 use crate::database::{run_migrations, SharedConnection};
 use crate::logger::init;
 
-
+pub type SharedJoinHandle = Arc<RwLock<Option<JoinHandle<()>>>>;
 
 struct Bot{
     database: SharedConnection, // Shared connection to the database to run sql request from everywhere
-    tips_scheduler: Option<JoinHandle<()>> // Handler of the scheduler to stop it
+    tips_scheduler: SharedJoinHandle, // Handler of the scheduler to stop it
 }
 
 
@@ -40,7 +40,6 @@ impl EventHandler for Bot{
     async fn message(&self, ctx: Context, msg: Message) {
         let _user_id = msg.author.id.0 as i64;
         if msg.content == "!ping"{
-
 
             let msg = msg.channel_id.send_message(&ctx.http, |m| {
                 m.content("I'm alive ;)")
@@ -56,7 +55,7 @@ impl EventHandler for Bot{
     // The interaction handler will handle every /commands
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
-            info!("Received command interaction: {:#?}", command);
+            println!("Received command interaction: {:#?}", command);
 
             let embed = match command.data.name.as_str() {
                 "tips_list" => {
@@ -75,12 +74,15 @@ impl EventHandler for Bot{
                     commands::tips::delete::run(&command.data.options, self.database.clone()).await
                 },
                 "scheduler_config" => {
-                    commands::tips_scheduler::config::run(&command.data.options, self.database.clone()).await
+                    commands::tips_scheduler::config::run(&command.data.options, self.database.clone(), self.tips_scheduler.clone(), &ctx.http).await
+                },
+                "scheduler" => {
+                    commands::tips_scheduler::scheduler::run(&command.data.options, self.database.clone(), self.tips_scheduler.clone(), &ctx.http).await
                 },
                 _ => {
                     CreateEmbed::default()
                         .title("Not implemented :(")
-                        .colour(Color::from_rgb(255, 0, 0))
+                        .colour(Color::from_rgb(255, 204, 0))
                         .description("Please retry later. If you think it's an error contact the administrator of the server.")
                         .timestamp(Timestamp::now())
                         .to_owned()
@@ -108,8 +110,6 @@ impl EventHandler for Bot{
     //
     // In this case, just print what the current user's username is.
     async fn ready(&self, ctx: Context, data: Ready) {
-        println!("{} is connected and ready to use !", data.user.name);
-
         let guild_id = data.guilds.first().unwrap().id;
 
         let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
@@ -122,10 +122,12 @@ impl EventHandler for Bot{
                 .create_application_command(|command| commands::tips::delete::register(command))
                 // scheduler
                 .create_application_command(|command| commands::tips_scheduler::config::register(command))
+                .create_application_command(|command| commands::tips_scheduler::scheduler::register(command))
         })
             .await;
 
         println!("I now have the following guild slash commands: {:#?}", commands);
+        println!("{} is connected and ready to use !", data.user.name);
     }
 }
 
@@ -149,7 +151,7 @@ async fn main() {
 
     let bot = Bot{
         database,
-        tips_scheduler: None // there is now scheduler running
+        tips_scheduler: Arc::from(RwLock::from(None)), // there is no scheduler running
     };
 
 
