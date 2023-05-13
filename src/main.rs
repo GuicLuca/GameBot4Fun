@@ -8,7 +8,7 @@ mod utils;
 use std::env;
 use std::sync::{Arc};
 use dotenv::dotenv;
-use log::{error, warn};
+use log::{error, info, warn};
 use serenity::{async_trait, Client};
 use serenity::builder::CreateEmbed;
 use serenity::client::{Context, EventHandler};
@@ -25,11 +25,22 @@ use tokio_rusqlite::Connection;
 use crate::database::{run_migrations, SharedConnection};
 use crate::logger::init;
 
+/**
+ * Public type used to share reference of JoinHandle
+ * to keep tracking async task like the tips scheduler.
+ */
 pub type SharedJoinHandle = Arc<RwLock<Option<JoinHandle<()>>>>;
 
+/**
+ * This is the main structure. It's here that
+ * every event are handled and response are sent.
+ *
+ * @member database: SharedConnection, Shared connection to the database to run sql request from everywhere
+ * @member tips_scheduler: SharedJoinHandle, Handler of the scheduler to execute action on it.
+ */
 struct Bot{
-    database: SharedConnection, // Shared connection to the database to run sql request from everywhere
-    tips_scheduler: SharedJoinHandle, // Handler of the scheduler to stop it
+    database: SharedConnection,
+    tips_scheduler: SharedJoinHandle,
 }
 
 
@@ -38,13 +49,11 @@ impl EventHandler for Bot{
     // The message handler will check incoming message and check command prefix
     // to execute corresponding commands.
     async fn message(&self, ctx: Context, msg: Message) {
-        let _user_id = msg.author.id.0 as i64;
+        // THis is a simple ping command
         if msg.content == "!ping"{
-
             let msg = msg.channel_id.send_message(&ctx.http, |m| {
                 m.content("I'm alive ;)")
             }).await;
-
 
             if let Err(why) = msg {
                 error!("Failed to send embed message. Error:\n{}", why);
@@ -54,9 +63,10 @@ impl EventHandler for Bot{
 
     // The interaction handler will handle every /commands
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        // Check if it's an application command
         if let Interaction::ApplicationCommand(command) = interaction {
             println!("Received command interaction: {:#?}", command);
-
+            // Execute the corresponding command and get the response embed
             let embed = match command.data.name.as_str() {
                 "tips_list" => {
                     commands::tips::list::run(&command.data.options, self.database.clone()).await
@@ -89,6 +99,7 @@ impl EventHandler for Bot{
                 },
             };
 
+            // Send the response in the same channel as the /command
             if let Err(why) = command
                 .create_interaction_response(&ctx.http, |response| {
                     response
@@ -107,11 +118,11 @@ impl EventHandler for Bot{
     // Set a handler to be called on the `ready` event. This is called when a
     // shard is booted, and a READY payload is sent by Discord. This payload
     // contains data like the current user's guild Ids, current user data, private channels, and more.
-    //
-    // In this case, just print what the current user's username is.
     async fn ready(&self, ctx: Context, data: Ready) {
+        // Get the guild (server) id
         let guild_id = data.guilds.first().unwrap().id;
 
+        // Create new application commands
         let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
             commands
                 // tips
@@ -126,7 +137,7 @@ impl EventHandler for Bot{
         })
             .await;
 
-        println!("I now have the following guild slash commands: {:#?}", commands);
+        info!("I now have the following guild slash commands: {:#?}", commands);
         println!("{} is connected and ready to use !", data.user.name);
     }
 }
@@ -134,8 +145,9 @@ impl EventHandler for Bot{
 
 #[tokio::main]
 async fn main() {
+    // Load .env var in the system environment
     dotenv().expect("Failed to load .env variables into system env");
-    // init the logger : see logger.rs
+    // Init the logger : see logger.rs
     init().expect("Failed to init the logger.");
     // Configure the client with the discord bot token in the environment token
     let token = env::var("DISCORD_TOKEN").expect("Expected an env file with the DISCORD_TOKEN entry set.");
@@ -145,15 +157,13 @@ async fn main() {
         .expect("Couldn't connect to database")));
 
     // Run migrations, which updates the database's schema to the latest version.
-    {
-        run_migrations(database.clone()).await.expect("Failed to run migrations. Error");
-    }
+    run_migrations(database.clone()).await.expect("Failed to run migrations. Error");
 
+    // Create the main structure which will handle events
     let bot = Bot{
         database,
         tips_scheduler: Arc::from(RwLock::from(None)), // there is no scheduler running
     };
-
 
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES

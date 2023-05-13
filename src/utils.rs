@@ -92,9 +92,9 @@ pub fn get_optional_string_param_from_options(options: &[CommandDataOption], ind
  * This method return the string message needed to display properly
  * a tips in the chat.
  *
- * @param title: &str,
- * @param content: &str,
- * @param tags_string: &str,
+ * @param title: String,
+ * @param content: String,
+ * @param tags_string: String,
  *
  * @return CreateEmbed, the embed containing the tip
  */
@@ -118,11 +118,11 @@ pub fn display_full_tip_in_embed(title: String, content: String, tags_opt: Optio
 }
 /**
  * This method return the string message needed to display
- * a tips in the chat as list style.  >" - title (tags)"
+ * a tips in the chat as list style.  >"id - title #tags"
  *
  * @param id: u32,
- * @param title: &str,
- * @param tags_string: &str,
+ * @param title: String,
+ * @param tags_string: String,
  *
  * @return String, the formatted message
  */
@@ -130,7 +130,7 @@ pub fn display_minimized_tip(id: u32, title: String, tags_string: Option<String>
 {
     let tags = tags_string.unwrap_or_else(|| String::from(""));
     return if tags != "" {
-        format!("*{}* - **{}**    #{}#",
+        format!("*{}* - **{}**    #{}",
             id,
             title,
             tags

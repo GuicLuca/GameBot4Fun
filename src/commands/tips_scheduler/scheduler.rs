@@ -40,11 +40,13 @@ struct Tip {
  *
  * @param options: &[CommandDataOption], A slice of command option found in the interaction
  * @param conn: SharedConnection, the database access to run queries on the sqlite database.
+ * @param scheduler_status: SharedJoinHandle, the joinHandle of the scheduler to perform action on it.
+ * @param http: &Arc<Http>, Http element used to send message on the discord server.
  *
  * @return CreateEmbed, the embed message to say in response
  */
 pub async fn run(options: &[CommandDataOption], conn: SharedConnection, scheduler_status: SharedJoinHandle, http: &Arc<Http>) -> CreateEmbed {
-    // 1 - get parms values to chose what action execute :
+    // 1 - get action value to chose the procedure to execute :
     let action = &*match get_required_string_param_from_options(options, 0, "action") {
         Ok(val) => {val}
         Err(err) => {
@@ -52,6 +54,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection, schedule
         }
     };
 
+    // Return the embed resulting of the procedure executed
     return match action {
         "start" => {
             start(conn, scheduler_status,http.clone()).await
@@ -63,6 +66,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection, schedule
             info(conn, scheduler_status).await
         },
         _ => {
+            // Action invalid or not implemented
             CreateEmbed::default()
                 .title(format!("Action  `{}`  not implemented :(", action))
                 .colour(Color::from_rgb(255, 0, 0))
@@ -73,10 +77,19 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection, schedule
     };
 }
 
+/**
+ * Action START : start the tips scheduler with the current configuration.
+ *
+ * @param conn: SharedConnection, the database access to run queries on the sqlite database.
+ * @param scheduler_status: SharedJoinHandle, the joinHandle of the scheduler to perform action on it.
+ * @param http: &Arc<Http>, Http element used to send message on the discord server.
+ *
+ * @return CreateEmbed, the embed message to say in response
+ */
 pub async fn start(conn: SharedConnection, scheduler_status: SharedJoinHandle, http: Arc<Http>) -> CreateEmbed
 {
     return match conn.lock().await.call(move |conn| {
-        // Get the config object:
+        // Get the config object to pass it to the async task:
         let mut stmt = conn.prepare("SELECT channel, hour, minute FROM scheduler_config WHERE id = ?1")?;
         let row_data = stmt.query_row([CONFIG_ID.to_string()], |row|
             Ok(
@@ -88,20 +101,23 @@ pub async fn start(conn: SharedConnection, scheduler_status: SharedJoinHandle, h
             )
         )?;
 
-        // 3- return every row found in a Vec<String>
+        // return the element found or an rusqlite::Error
         Ok::<_, Error>(row_data)
     }).await {
         Ok(config) => {
-            // - spawner un scheduler
+            // Successfully found a configuration :
+            // Spawn a tips_scheduler async task
             {
                 let mut scheduler_mut =scheduler_status.write().await;
                 let task_conn = conn.clone();
                 let handler = tokio::spawn(async move {
+                    // While task not aborted or crashed:
                     loop {
+                        // Check if time is equal to the config time
                         let now = Local::now();
                         if now.hour() == config.hour && now.minute() == config.minute {
                             // It's time to send a tips !!
-
+                            // Get all tips from the database
                             match task_conn.lock().await.call(|conn|{
                                 let mut stmt = conn.prepare("SELECT title, content, tags FROM tips")?;
                                 let rows_data = stmt.query_map([], |row|
@@ -115,24 +131,24 @@ pub async fn start(conn: SharedConnection, scheduler_status: SharedJoinHandle, h
                                 )?
                                     .collect::<Result<Vec<Tip>, Error>>()?;
 
-                                // 3 - return avery row found in a Vec<String>
+                                // return avery rows found in a Vec<Tip>
                                 Ok::<_, Error>(rows_data)
                             }).await{
                                 Ok(rows_data) => {
+                                    // List of tip successfully fetched :
+                                    // Select a random one to display.
                                     let tip = rows_data[thread_rng().gen_range(0..rows_data.len())].clone();
-
-                                    let msg =ChannelId::from(config.channel).send_message(&http, |m| {
+                                    // Send the message
+                                    if let Err(why) = ChannelId::from(config.channel).send_message(&http, |m| {
                                         m.set_embed(
                                             display_full_tip_in_embed(tip.title, tip.content, Some(tip.tags))
                                         )
-                                    }).await;
-
-
-                                    if let Err(why) = msg {
+                                    }).await {
                                         error!("Failed to send embed message. Error:\n{}", why);
                                     }
                                 }
                                 Err(err) => {
+                                    // Failed to fetch tips from database
                                     let msg =ChannelId::from(config.channel).send_message(&http, |m| {
                                         m.set_embed(
                                             make_error_embed(
@@ -153,8 +169,11 @@ pub async fn start(conn: SharedConnection, scheduler_status: SharedJoinHandle, h
                         sleep(Duration::from_secs(60)).await;
                     }
                 });
+                // Set the scheduler JoinHandle to keep control on it even after the end of this command
                 *scheduler_mut = Some(handler);
             } // End spawn task
+
+            // return the response embed with the current config and the scheduler status
             let channel: Mention = Channel(ChannelId::from(config.channel));
             display_full_tip_in_embed(
                 format!("Scheduler is now running:"),
@@ -163,6 +182,7 @@ pub async fn start(conn: SharedConnection, scheduler_status: SharedJoinHandle, h
             )
         }
         Err(err) => {
+            // fail to get the config
             if let tokio_rusqlite::Error::Rusqlite(stmt_err) = &err {
                 if let InvalidParameterCount(_,_) = stmt_err {
                     return CreateEmbed::default()
@@ -178,9 +198,17 @@ pub async fn start(conn: SharedConnection, scheduler_status: SharedJoinHandle, h
     };
 }
 
-
+/**
+ * Action STOP : stop the tips scheduler.
+ *
+ * @param conn: SharedConnection, the database access to run queries on the sqlite database.
+ * @param scheduler_status: SharedJoinHandle, the joinHandle of the scheduler to perform action on it.
+ *
+ * @return CreateEmbed, the embed message to say in response
+ */
 pub async fn stop(conn: SharedConnection, scheduler_status: SharedJoinHandle) -> CreateEmbed
 {
+    // Stop the task and drop the joinHandle
     {
         let mut scheduler_write = scheduler_status.write().await;
         if  scheduler_write.is_some() {
@@ -188,11 +216,18 @@ pub async fn stop(conn: SharedConnection, scheduler_status: SharedJoinHandle) ->
             *scheduler_write = None;
         }
     }
-
+    // Return the current info of the scheduler but change the title.
     info(conn, scheduler_status).await.title("Scheduler is now stopped").to_owned()
 }
 
-
+/**
+ * Action INFO : Show every information about the tips scheduler.
+ *
+ * @param conn: SharedConnection, the database access to run queries on the sqlite database.
+ * @param scheduler_status: SharedJoinHandle, the joinHandle of the scheduler to perform action on it.
+ *
+ * @return CreateEmbed, the embed message to say in response
+ */
 async fn info(conn: SharedConnection, scheduler_status: SharedJoinHandle) -> CreateEmbed
 {
     return match conn.lock().await.call(move |conn| {
@@ -208,10 +243,11 @@ async fn info(conn: SharedConnection, scheduler_status: SharedJoinHandle) -> Cre
             )
         )?;
 
-        // 3 - return avery row found in a Vec<String>
+        // Return the SchedulerConfig found or a rusqlite::Error instead
         Ok::<_, Error>(row_data)
     }).await {
         Ok(config) => {
+            // Display the configuration fetched
             let channel: Mention = Channel(ChannelId::from(config.channel));
             let status = {
                 let scheduler_read = scheduler_status.read().await;
@@ -232,6 +268,7 @@ async fn info(conn: SharedConnection, scheduler_status: SharedJoinHandle) -> Cre
             )
         }
         Err(err) => {
+            // Can't find any configuration
             if let tokio_rusqlite::Error::Rusqlite(stmt_err) = &err {
                 if let InvalidParameterCount(_,_) = stmt_err {
                     return CreateEmbed::default()

@@ -1,6 +1,12 @@
 use std::env;
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 
+/**
+ * This is the logger configuration of the bot.
+ * => In the whole project use log marco (info!, error!, ...) 
+ * and the logger will print every log above the log level.
+ * see .env.example for log level.
+ */
 struct SimpleLogger;
 
 impl log::Log for SimpleLogger {
@@ -17,6 +23,12 @@ impl log::Log for SimpleLogger {
     fn flush(&self) {}
 }
 
+/**
+ * This method set the logger an initialize the loglevel.
+ * It MUST be called in the beginning of the program !
+ *
+ * @return Result<(), SetLoggerError>
+ */
 pub fn init() -> Result<(), SetLoggerError> {
     log::set_logger(&LOGGER)
         .map(|()|{
@@ -32,5 +44,6 @@ pub fn init() -> Result<(), SetLoggerError> {
             log::set_max_level(level_filter)
         })
 }
+
 
 static LOGGER: SimpleLogger = SimpleLogger;

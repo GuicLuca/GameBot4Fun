@@ -20,8 +20,12 @@ use crate::SharedJoinHandle;
 use crate::utils::{display_full_tip_in_embed, make_error_embed};
 
 
-pub static CONFIG_ID: usize = 1;
+pub static CONFIG_ID: usize = 1; // Static configuration id
 
+/*
+This struct is used to access fetched data
+from the database and give it to sub-functions.
+ */
 #[derive(Clone)]
 pub struct SchedulerConfig {
     pub channel: u64,
@@ -30,22 +34,23 @@ pub struct SchedulerConfig {
 }
 
 /**
- * This method is the execution of the command /tips_create.
+ * This method is the execution of the command /scheduler_config.
  * This is here that all the workflow occur.
  *
  * @param options: &[CommandDataOption], A slice of command option found in the interaction
  * @param conn: SharedConnection, the database access to run queries on the sqlite database.
+ * @param scheduler_status: SharedJoinHandle, the joinHandle of the scheduler to perform action on it.
+ * @param http: &Arc<Http>, Http element used to send message on the discord server.
  *
  * @return CreateEmbed, the embed message to say in response
  */
 pub async fn run(options: &[CommandDataOption], conn: SharedConnection, scheduler: SharedJoinHandle, http: &Arc<Http>) -> CreateEmbed {
-    // 1 - get parms values :
     let mut updated_columns:Vec<&str> = Vec::with_capacity(3); // we will add column name updated for the query creation
     let mut updated_values:Vec<usize> = Vec::with_capacity(3); // we will add new values
 
-
     // 1 - check if optional values are present
     let mut message_channel: Option<PartialChannel> = None;
+    let mut message_channel_id = 0;
     let mut hour: Option<usize> = None;
     let mut min: Option<usize> = None;
 
@@ -102,7 +107,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection, schedule
         }
     }
 
-    let mut message_channel_id = 0;
+    // if there is value, add the column name and the value to prepare the sql query
     if message_channel.is_some() {
         message_channel_id = message_channel.unwrap().id.0;
         updated_columns.push("channel");
@@ -151,9 +156,8 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection, schedule
             conn.execute(query, params![CONFIG_ID.to_string(), message_channel_id, hour, min])?;
         }
 
+
         // Get the final config object:
-
-
         let mut stmt = conn.prepare("SELECT channel, hour, minute FROM scheduler_config WHERE id = ?1")?;
         let row_data = stmt.query_row([CONFIG_ID.to_string()], |row|
             Ok(
@@ -165,11 +169,12 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection, schedule
             )
         )?;
 
-        // 3 - return avery row found in a Vec<String>
+        // Return the config found or an rusqlite::Error
         Ok::<_, Error>(row_data)
     }).await {
         Ok(config) => {
-            let channel: Mention = Channel(ChannelId::from(config.channel));
+            // Display the config in the response embed
+            let channel: Mention = Channel(ChannelId::from(config.channel)); // transform the channel id in a channel mention "#channel_name"
             display_full_tip_in_embed(
                 format!("He is the new config of the tips scheduler :"),
                 format!("- Channel : {}\n- Hour:{:02}H{:02}", channel, config.hour, config.minute),
@@ -191,15 +196,26 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection, schedule
         }
     };
 
-    // 4 - restart scheduler
-    stop(conn.clone(), scheduler.clone()).await;
-    start(conn, scheduler, http.clone()).await;
+    // 4 - restart scheduler if he was running
+    let is_scheduler_running = {
+        let mut scheduler_write = scheduler.write().await;
+        let mut finished: bool = true;
+        if  scheduler_write.is_some() {
+            finished = scheduler_write.as_ref().unwrap().is_finished();
+        }
+        !finished // scheduler is running if the task is not complete
+    };
 
-
-
-    respons_embed.author(|a|{
-        a.name("Scheduler has been restarted to sync with the new configuration")
-    }).to_owned()
+    if is_scheduler_running {
+        stop(conn.clone(), scheduler.clone()).await;
+        start(conn, scheduler, http.clone()).await;
+        // custom the title embed if the scheduler has restart
+        return respons_embed.author(|a|{
+            a.name("Scheduler has been restarted to sync with the new configuration")
+        }).to_owned()
+    }
+    // return the default embed instead
+    respons_embed
 }
 
 /**

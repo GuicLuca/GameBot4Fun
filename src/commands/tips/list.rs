@@ -84,7 +84,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
             )?
                 .collect::<Result<Vec<ListTip>, rusqlite::Error>>()?;
 
-            // 3 - return avery row found in a Vec<String>
+            // return every rows found in a Vec<ListTip>
             Ok::<_, rusqlite::Error>(rows_data)
         }).await {
             Ok(tips) => {
@@ -128,7 +128,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
             )?
                 .collect::<Result<Vec<ListTip>, rusqlite::Error>>()?;
 
-            // 3 - return avery row found in a Vec<String>
+            // return every row found in a Vec<ListTip>
             Ok::<_, rusqlite::Error>(rows_data)
         }).await{
             Ok(rows_data) => {

@@ -12,7 +12,6 @@ use crate::commands::tips::read::ReadTip;
 use crate::database::SharedConnection;
 use crate::utils::{display_full_tip_in_embed, get_required_integer_param_from_options, make_error_embed};
 
-
 /**
  * This method is the execution of the command /tips_create.
  * This is here that all the workflow occur.
@@ -83,6 +82,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
         }
     }
 
+    // if there is value, add the column name and the value to prepare the sql query
     if title != "" {
         updated_columns.push("title");
         updated_values.push(title);
@@ -132,13 +132,15 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
             )
         )?;
 
-        // 3 - return avery row found in a Vec<String>
+        // Return the updated value of the tip or an rusqlite::Error
         Ok::<_, rusqlite::Error>(row_data)
     }).await {
         Ok(tip) => {
+            // Display the tip
             display_full_tip_in_embed(tip.title, tip.content, Some(tip.tags))
         }
         Err(err) => {
+            // No tip updated or rusqlite::Error
             if let tokio_rusqlite::Error::Rusqlite(rusqlite_err) = &err {
                 if let rusqlite::Error::QueryReturnedNoRows = rusqlite_err {
                     return CreateEmbed::default()

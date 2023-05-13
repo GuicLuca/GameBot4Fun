@@ -4,6 +4,15 @@ use tokio::sync::Mutex;
 
 use tokio_rusqlite::{Connection, Error};
 
+/**
+ * This method execute migration on the database
+ * to ensure every table are created before the bot
+ * use it.
+ *
+ * @param conn: SharedConnection, the database access
+ *
+ * @return Result<(), Error>
+ */
 pub async fn run_migrations(conn: SharedConnection) -> Result<(), Error> {
     conn.lock().await.call(|conn|{
         conn.execute_batch(

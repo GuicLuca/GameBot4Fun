@@ -29,7 +29,7 @@ pub struct ReadTip {
  * @return CreateEmbed, the embed message to say in response
  */
 pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> CreateEmbed {
-    // 1 - check if optional values are present
+    // 1 - Get the tip id you want to show
     let tip_id: u64 = match get_required_integer_param_from_options(options, 0, "Id"){
         Ok(val) => val,
         Err(err) => {
@@ -37,7 +37,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
         }
     };
 
-    // 3 - Get the tip from the database and return a response message
+    // 2 - Get the tip from the database and return a response message
     return match conn.lock().await.call(move |conn| {
         let mut stmt = conn.prepare("SELECT title, content, tags FROM tips WHERE id = ?1")?;
         let row_data = stmt.query_row([tip_id], |row|
@@ -50,13 +50,15 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
             )
         )?;
 
-        // 3 - return avery row found in a Vec<String>
+        // Return the readTip found or a rusqlite::Error
         Ok::<_, rusqlite::Error>(row_data)
     }).await {
         Ok(val) => {
+            // Display the fetched tip
             display_full_tip_in_embed(val.title, val.content, Some(val.tags))
         }
         Err(err) => {
+            // No tip found or rusqlite::Error
             if let tokio_rusqlite::Error::Rusqlite(rusqlite_err) = &err {
                 if let rusqlite::Error::QueryReturnedNoRows = rusqlite_err {
                     return CreateEmbed::default()
