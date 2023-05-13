@@ -176,7 +176,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection, schedule
             // Display the config in the response embed
             let channel: Mention = Channel(ChannelId::from(config.channel)); // transform the channel id in a channel mention "#channel_name"
             display_full_tip_in_embed(
-                format!("He is the new config of the tips scheduler :"),
+                format!("Here is the new config of the tips scheduler :"),
                 format!("- Channel : {}\n- Hour:{:02}H{:02}", channel, config.hour, config.minute),
                 None
             )
@@ -198,7 +198,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection, schedule
 
     // 4 - restart scheduler if he was running
     let is_scheduler_running = {
-        let mut scheduler_write = scheduler.write().await;
+        let scheduler_write = scheduler.read().await;
         let mut finished: bool = true;
         if  scheduler_write.is_some() {
             finished = scheduler_write.as_ref().unwrap().is_finished();

@@ -92,7 +92,7 @@ pub async fn run(options: &[CommandDataOption], conn: SharedConnection) -> Creat
  * @return &mut CreateApplicationCommand, used to chain operations
  */
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
-    command.name("tips_delete").description("Delete.")
+    command.name("tips_delete").description("Delete the tip using it's id.")
         .create_option(|option| {
             option
                 .name("id")

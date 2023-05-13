@@ -115,6 +115,7 @@ pub async fn start(conn: SharedConnection, scheduler_status: SharedJoinHandle, h
                     loop {
                         // Check if time is equal to the config time
                         let now = Local::now();
+                        println!("now : {}:{}    config: {}:{}", now.hour(), now.minute(), config.hour, config.minute);
                         if now.hour() == config.hour && now.minute() == config.minute {
                             // It's time to send a tips !!
                             // Get all tips from the database
@@ -149,7 +150,7 @@ pub async fn start(conn: SharedConnection, scheduler_status: SharedJoinHandle, h
                                 }
                                 Err(err) => {
                                     // Failed to fetch tips from database
-                                    let msg =ChannelId::from(config.channel).send_message(&http, |m| {
+                                    let msg = ChannelId::from(config.channel).send_message(&http, |m| {
                                         m.set_embed(
                                             make_error_embed(
                                                 "scheduler::run",
