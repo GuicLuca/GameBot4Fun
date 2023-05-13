@@ -1,0 +1,57 @@
+{
+  "db": "SQLite",
+  "51da8928e408bc2a2c853ef700fc7afc5af4b7fa74c3d8e1bac39d8b64ed6de1": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false
+      ],
+      "parameters": {
+        "Right": 0
+      }
+    },
+    "query": "SELECT * FROM tips_category;"
+  },
+  "75f7c954c4c20db77e59ba2bf49c6faf33084aae05bddcd2899fb16dfc7c0b4f": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 1
+      }
+    },
+    "query": "DELETE FROM tips_category WHERE id = ?;"
+  },
+  "76ef2ff4f6c732515e1ea6ef147735afaf210c23a173478bb6ad15aa9af08234": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 2
+      }
+    },
+    "query": "UPDATE tips_category SET name = ? WHERE id = ?;"
+  },
+  "b3d9c13c4e83c001fdfe664f2ee600aaead3be6bd3ecbc884c7b3eeddee2e5eb": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 1
+      }
+    },
+    "query": "INSERT INTO tips_category (name) VALUES (?);"
+  }
+}
