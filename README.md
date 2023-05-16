@@ -11,7 +11,7 @@ The GameBot4Fun bot is a small rust bot used on the GameDev4Fun discord to send 
 3. copy the `.env.exemple` file and rename it `.env`.
 4. Fill every field with correct values
 5. Run the script
-6. That's it, you can now invite the bot to your server by clicking [the  link](https://discord.com/oauth2/authorize?client_id=1095468723944566904&permissions=277025508416&scope=bot).
+6. That's it, you can now invite the bot to your server by clicking the invitation link. (get it from developers of the project)
 
 
 ---
